@@ -9,44 +9,46 @@ struct OnboardingCoordinatorView: View {
     // MARK: - Private variables
 
     @EnvironmentObject private var router: AppRouter
+    private var onboardingRouter: any OnboardingRouting { router }
+    private var successRouter: any SuccessRouting { router }
 
     // MARK: - Other
 
     var body: some View {
         NavigationStack(path: $router.onboardingStack) {
             OnboardingStep1View(
-                onNext: { router.onboardingPush(.step2) }
+                onNext: { onboardingRouter.onboardingPush(.step2) }
             )
             .navigationDestination(for: OnboardingRoute.self) { route in
                 switch route {
                 case .step2:
                     OnboardingStep2View(
-                        onShowPaywall: { router.presentPaywall() },
-                        onNext: { router.onboardingPush(.step3) },
-                        onPopToRoot: { router.onboardingPopToRoot() }
+                        onShowPaywall: { onboardingRouter.presentPaywall() },
+                        onNext: { onboardingRouter.onboardingPush(.step3) },
+                        onPopToRoot: { onboardingRouter.onboardingPopToRoot() }
                     )
 
                 case .step3:
                     OnboardingStep3View(
                         onFinish: {
-                            router.presentSuccess(
+                            successRouter.presentSuccess(
                                 title: "Done!",
                                 message: "Onboarding is complete.",
                                 primaryButton: "Open App",
                                 primaryAction: .goAuthorizedTab1Root
                             )
                         },
-                        onPopToRoot: { router.onboardingPopToRoot() }
+                        onPopToRoot: { onboardingRouter.onboardingPopToRoot() }
                     )
                 }
             }
         }
         .sheet(isPresented: $router.isPaywallPresented) {
             PaywallSheetView(
-                onClose: { router.dismissPaywall() },
+                onClose: { onboardingRouter.dismissPaywall() },
                 onPurchased: {
-                    router.dismissPaywall()
-                    router.presentSuccess(
+                    onboardingRouter.dismissPaywall()
+                    successRouter.presentSuccess(
                         title: "Purchase successful",
                         message: "Access unlocked.",
                         primaryButton: "Continue",

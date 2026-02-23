@@ -9,16 +9,18 @@ struct Tab2CoordinatorView: View {
     // MARK: - Private variables
 
     @EnvironmentObject private var router: AppRouter
+    private var tab2Router: any Tab2Routing { router }
+    private var successRouter: any SuccessRouting { router }
 
     // MARK: - Other
 
     var body: some View {
         NavigationStack(path: $router.tab2Stack) {
             Tab2RootView(
-                goNext: { router.tab2Push(.a) },
-                popBackTwo: { router.tab2Pop(2) },
+                goNext: { tab2Router.tab2Push(.a) },
+                popBackTwo: { tab2Router.tab2Pop(2) },
                 logout: {
-                    router.presentSuccess(
+                    successRouter.presentSuccess(
                         title: "Log out?",
                         message: "This will reset state and return to onboarding.",
                         primaryButton: "Log out",
@@ -29,30 +31,30 @@ struct Tab2CoordinatorView: View {
             .navigationDestination(for: Tab2Route.self) { route in
                 switch route {
                 case .a:
-                    ScreenView(title: "Tab2 A") { router.tab2Push(.b) }
+                    ScreenView(title: "Tab2 A") { tab2Router.tab2Push(.b) }
                 case .b:
-                    ScreenView(title: "Tab2 B") { router.tab2Push(.c) }
+                    ScreenView(title: "Tab2 B") { tab2Router.tab2Push(.c) }
                 case .c:
-                    ScreenView(title: "Tab2 C") { router.tab2Push(.d) }
+                    ScreenView(title: "Tab2 C") { tab2Router.tab2Push(.d) }
                 case .d:
-                    ScreenView(title: "Tab2 D") { router.tab2Push(.e) }
+                    ScreenView(title: "Tab2 D") { tab2Router.tab2Push(.e) }
                 case .e:
                     VStack(spacing: 16) {
                         Text("Tab2 E")
                             .font(.title2).bold()
 
                         Button("Pop back 2 screens") {
-                            router.tab2Pop(2)
+                            tab2Router.tab2Pop(2)
                         }
                         .buttonStyle(.borderedProminent)
 
                         Button("Pop to root") {
-                            router.tab2PopToRoot()
+                            tab2Router.tab2PopToRoot()
                         }
                         .buttonStyle(.bordered)
 
                         Button("Show Success (dismiss only)") {
-                            router.presentSuccess(
+                            successRouter.presentSuccess(
                                 title: "Success",
                                 message: "Just dismiss this success screen.",
                                 primaryButton: "OK",
