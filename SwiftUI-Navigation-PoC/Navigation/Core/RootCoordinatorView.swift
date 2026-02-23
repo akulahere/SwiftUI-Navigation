@@ -10,6 +10,34 @@ struct RootCoordinatorView: View {
 
     @StateObject private var router = AppRouter()
 
+    private var sheetSuccessPayload: Binding<SuccessPayload?> {
+        Binding(
+            get: {
+                guard let payload = router.successPayload else { return nil }
+                return payload.presentationStyle == .sheet ? payload : nil
+            },
+            set: { newValue in
+                if newValue == nil, router.successPayload?.presentationStyle == .sheet {
+                    router.successPayload = nil
+                }
+            }
+        )
+    }
+
+    private var fullScreenSuccessPayload: Binding<SuccessPayload?> {
+        Binding(
+            get: {
+                guard let payload = router.successPayload else { return nil }
+                return payload.presentationStyle == .fullScreen ? payload : nil
+            },
+            set: { newValue in
+                if newValue == nil, router.successPayload?.presentationStyle == .fullScreen {
+                    router.successPayload = nil
+                }
+            }
+        )
+    }
+
     // MARK: - Other
 
     var body: some View {
@@ -24,7 +52,15 @@ struct RootCoordinatorView: View {
                     .environmentObject(router)
             }
         }
-        .sheet(item: $router.successPayload) { payload in
+        .sheet(item: sheetSuccessPayload) { payload in
+            SuccessView(
+                title: payload.title,
+                message: payload.message,
+                primaryButton: payload.primaryButton,
+                onPrimary: { router.handleSuccessPrimary() }
+            )
+        }
+        .fullScreenCover(item: fullScreenSuccessPayload) { payload in
             SuccessView(
                 title: payload.title,
                 message: payload.message,

@@ -60,8 +60,26 @@ protocol SuccessRouting: AnyObject {
         title: String,
         message: String,
         primaryButton: String,
-        primaryAction: SuccessAction
+        primaryAction: SuccessAction,
+        presentationStyle: SuccessPresentationStyle
     )
 
     func handleSuccessPrimary()
+}
+
+extension SuccessRouting {
+    func presentSuccess(
+        title: String,
+        message: String,
+        primaryButton: String,
+        primaryAction: SuccessAction
+    ) {
+        presentSuccess(
+            title: title,
+            message: message,
+            primaryButton: primaryButton,
+            primaryAction: primaryAction,
+            presentationStyle: .sheet
+        )
+    }
 }

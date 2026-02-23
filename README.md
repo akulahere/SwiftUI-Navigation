@@ -87,11 +87,18 @@ enum NavigationCommand: Equatable {
 Purpose: global screens/overlays that can be triggered from any flow.
 
 ```swift
+enum SuccessPresentationStyle: Equatable {
+    case sheet
+    case fullScreen
+}
+
 struct SuccessPayload: Identifiable, Equatable {
     let id = UUID()
     let title: String
     let message: String
+    let primaryButton: String
     let primaryAction: SuccessAction
+    let presentationStyle: SuccessPresentationStyle
 }
 ```
 
@@ -127,8 +134,14 @@ protocol HomeRouting: AnyObject {
 @MainActor
 protocol GlobalOverlayRouting: AnyObject {
     var successPayload: SuccessPayload? { get set }
-    func presentSuccess(_ payload: SuccessPayload)
-    func dismissSuccess()
+    func presentSuccess(
+        title: String,
+        message: String,
+        primaryButton: String,
+        primaryAction: SuccessAction,
+        presentationStyle: SuccessPresentationStyle
+    )
+    func handleSuccessPrimary()
 }
 
 @MainActor
@@ -159,7 +172,8 @@ protocol NavigationAnalyticsTracking: AnyObject {
 3. Cross-flow transitions must go through `NavigationCommand`.
 4. `pop(n)` must be safe for any `n` (including `n <= 0` and `n > stack.count`).
 5. Global overlays must be rendered at root level.
-6. UI layer must not contain business logic for cross-flow transitions.
+6. Overlay presentation style must come from payload (not hardcoded in feature view).
+7. UI layer must not contain business logic for cross-flow transitions.
 
 ## 4. New Project Bootstrap (Step-by-step)
 
@@ -170,7 +184,7 @@ protocol NavigationAnalyticsTracking: AnyObject {
 5. Add `NavigationCommand` and `NavigationCommandHandling` for cross-flow logic.
 6. Implement `RootCoordinator`.
 7. Implement `FlowCoordinator` for each flow/tab.
-8. Add common/global overlays (sheet/fullScreenCover).
+8. Add common/global overlays and style policy (sheet vs fullScreen).
 9. Add unit tests for router and command handler.
 10. Add navigation analytics in the routing layer.
 
@@ -273,14 +287,22 @@ Implementation:
 
 1. add global payload state to `AppRouter`
 2. add `GlobalOverlayRouting` protocol
-3. render at root as global sheet/fullScreenCover
-4. if action triggers cross-flow transition, use `NavigationCommand`
+3. add overlay presentation style enum (for example `sheet`, `fullScreen`)
+4. render at root using style-aware presentation (sheet and fullScreenCover)
+5. if action triggers cross-flow transition, use `NavigationCommand`
+
+Example policy:
+
+1. onboarding flow calls `presentSuccess(..., presentationStyle: .fullScreen)`
+2. main flows call `presentSuccess(..., presentationStyle: .sheet)`
+3. root coordinator decides which presenter to use by `payload.presentationStyle`
 
 Tests:
 
 1. screen opens from any flow
-2. screen dismisses correctly
-3. action maps to expected command
+2. style is respected by context (for example onboarding fullScreen, main flows sheet)
+3. screen dismisses correctly
+4. action maps to expected command
 
 ### 5.8 Add analytics
 

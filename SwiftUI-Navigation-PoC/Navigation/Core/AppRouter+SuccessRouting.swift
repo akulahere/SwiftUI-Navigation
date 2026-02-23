@@ -12,13 +12,15 @@ extension AppRouter: SuccessRouting {
         title: String,
         message: String,
         primaryButton: String,
-        primaryAction: SuccessAction
+        primaryAction: SuccessAction,
+        presentationStyle: SuccessPresentationStyle
     ) {
         successPayload = .init(
             title: title,
             message: message,
             primaryButton: primaryButton,
-            primaryAction: primaryAction
+            primaryAction: primaryAction,
+            presentationStyle: presentationStyle
         )
     }
 

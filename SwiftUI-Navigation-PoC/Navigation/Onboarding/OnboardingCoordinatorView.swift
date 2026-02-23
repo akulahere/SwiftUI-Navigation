@@ -35,7 +35,8 @@ struct OnboardingCoordinatorView: View {
                                 title: "Done!",
                                 message: "Onboarding is complete.",
                                 primaryButton: "Open App",
-                                primaryAction: .goAuthorizedTab1Root
+                                primaryAction: .goAuthorizedTab1Root,
+                                presentationStyle: .fullScreen
                             )
                         },
                         onPopToRoot: { onboardingRouter.onboardingPopToRoot() }
@@ -52,7 +53,8 @@ struct OnboardingCoordinatorView: View {
                         title: "Purchase successful",
                         message: "Access unlocked.",
                         primaryButton: "Continue",
-                        primaryAction: .dismiss
+                        primaryAction: .dismiss,
+                        presentationStyle: .fullScreen
                     )
                 }
             )
