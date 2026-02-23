@@ -1,226 +1,384 @@
 # SwiftUI Navigation PoC
 
-This document describes the navigation architecture used in this repository and provides implementation recipes for common and advanced navigation changes.
+This README is the canonical navigation guide for this repository.
+It covers:
 
-## Goals
+1. core navigation entities and interfaces
+2. invariants and state contracts
+3. implementation playbooks for common and advanced navigation changes
 
-- Keep navigation state explicit and testable.
-- Keep flow-specific navigation logic isolated.
-- Support cross-flow commands (for example logout or switch tab root) through a single command handler.
-- Make common changes predictable through repeatable recipes.
+## 1. Why This Architecture
 
-## Navigation Architecture At A Glance
+Navigation is modeled as explicit state plus typed commands.
+The design goals are:
 
-- `AppRouter` is the single source of navigation state.
-- Feature routing protocols define flow-specific APIs:
-  - `OnboardingRouting`
-  - `Tab1Routing`
-  - `Tab2Routing`
-  - `SuccessRouting`
-- `AppRouteCommand` models cross-flow transitions.
-- `AppRouteCommandHandling` applies commands to router state.
-- Coordinators build `NavigationStack`, map routes to screens, and invoke protocol APIs.
+1. single source of truth for navigation state
+2. flow isolation (onboarding, tab1, tab2)
+3. predictable cross-flow transitions
+4. testable routing logic without UI coupling
 
-## Project Navigation Structure
+## 2. Current Navigation Layout
 
-- Core
-  - `SwiftUI-Navigation-PoC/Navigation/Core/AppRouter.swift`
-  - `SwiftUI-Navigation-PoC/Navigation/Core/FeatureRoutingProtocols.swift`
-  - `SwiftUI-Navigation-PoC/Navigation/Core/AppRouter+RouteCommandHandling.swift`
-  - `SwiftUI-Navigation-PoC/Navigation/Core/AppRouter+SuccessRouting.swift`
-  - `SwiftUI-Navigation-PoC/Navigation/Core/RootCoordinatorView.swift`
-  - `SwiftUI-Navigation-PoC/Navigation/Core/AuthorizedCoordinatorView.swift`
-- Flow extensions and coordinators
-  - `SwiftUI-Navigation-PoC/Navigation/Onboarding/AppRouter+OnboardingRouting.swift`
-  - `SwiftUI-Navigation-PoC/Navigation/Onboarding/OnboardingCoordinatorView.swift`
-  - `SwiftUI-Navigation-PoC/Navigation/Tab1/AppRouter+Tab1Routing.swift`
-  - `SwiftUI-Navigation-PoC/Navigation/Tab1/Tab1CoordinatorView.swift`
-  - `SwiftUI-Navigation-PoC/Navigation/Tab2/AppRouter+Tab2Routing.swift`
-  - `SwiftUI-Navigation-PoC/Navigation/Tab2/Tab2CoordinatorView.swift`
-- Models
-  - `SwiftUI-Navigation-PoC/Navigation/Core/Models/Flow.swift`
-  - `SwiftUI-Navigation-PoC/Navigation/Core/Models/Tab.swift`
-  - `SwiftUI-Navigation-PoC/Navigation/Core/Models/OnboardingRoute.swift`
-  - `SwiftUI-Navigation-PoC/Navigation/Core/Models/Tab1Route.swift`
-  - `SwiftUI-Navigation-PoC/Navigation/Core/Models/Tab2Route.swift`
-  - `SwiftUI-Navigation-PoC/Navigation/Core/Models/SuccessAction.swift`
-  - `SwiftUI-Navigation-PoC/Navigation/Core/Models/SuccessPayload.swift`
-  - `SwiftUI-Navigation-PoC/Navigation/Core/Models/AppRouteCommand.swift`
+### 2.1 Core
 
-## Core Entities
+- `SwiftUI-Navigation-PoC/Navigation/Core/AppRouter.swift`
+- `SwiftUI-Navigation-PoC/Navigation/Core/FeatureRoutingProtocols.swift`
+- `SwiftUI-Navigation-PoC/Navigation/Core/AppRouter+SuccessRouting.swift`
+- `SwiftUI-Navigation-PoC/Navigation/Core/AppRouter+RouteCommandHandling.swift`
+- `SwiftUI-Navigation-PoC/Navigation/Core/RootCoordinatorView.swift`
+- `SwiftUI-Navigation-PoC/Navigation/Core/AuthorizedCoordinatorView.swift`
 
-### `Flow`
-Represents top-level app mode (`onboarding`, `authorized`).
+### 2.2 Flow-specific
 
-### `Tab`
-Represents active tab within authorized mode.
+- `SwiftUI-Navigation-PoC/Navigation/Onboarding/AppRouter+OnboardingRouting.swift`
+- `SwiftUI-Navigation-PoC/Navigation/Onboarding/OnboardingCoordinatorView.swift`
+- `SwiftUI-Navigation-PoC/Navigation/Tab1/AppRouter+Tab1Routing.swift`
+- `SwiftUI-Navigation-PoC/Navigation/Tab1/Tab1CoordinatorView.swift`
+- `SwiftUI-Navigation-PoC/Navigation/Tab2/AppRouter+Tab2Routing.swift`
+- `SwiftUI-Navigation-PoC/Navigation/Tab2/Tab2CoordinatorView.swift`
 
-### `Route` enums
+### 2.3 Models
+
+- `SwiftUI-Navigation-PoC/Navigation/Core/Models/Flow.swift`
+- `SwiftUI-Navigation-PoC/Navigation/Core/Models/Tab.swift`
+- `SwiftUI-Navigation-PoC/Navigation/Core/Models/OnboardingRoute.swift`
+- `SwiftUI-Navigation-PoC/Navigation/Core/Models/Tab1Route.swift`
+- `SwiftUI-Navigation-PoC/Navigation/Core/Models/Tab2Route.swift`
+- `SwiftUI-Navigation-PoC/Navigation/Core/Models/SuccessAction.swift`
+- `SwiftUI-Navigation-PoC/Navigation/Core/Models/SuccessPayload.swift`
+- `SwiftUI-Navigation-PoC/Navigation/Core/Models/AppRouteCommand.swift`
+
+## 3. Navigation Entity Catalog
+
+### 3.1 `Flow`
+Top-level application mode.
+
+Current values:
+- `onboarding`
+- `authorized`
+
+### 3.2 `Tab`
+Selected tab in authorized flow.
+
+Current values:
+- `tab1`
+- `tab2`
+
+### 3.3 `Route` enums
+Each flow has a route enum used by `NavigationStack(path:)`.
+
 - `OnboardingRoute`
 - `Tab1Route`
 - `Tab2Route`
 
-Each route enum models navigation path values for one flow/tab.
+### 3.4 `SuccessAction`
+Action selected on global success UI.
+It is mapped to cross-flow command via `routeCommand`.
 
-### `SuccessAction` and `SuccessPayload`
-- `SuccessPayload` defines content and action of global success screen.
-- `SuccessAction` is user intent from that screen.
-- `SuccessAction.routeCommand` maps actions to cross-flow command when needed.
+### 3.5 `AppRouteCommand`
+Typed cross-flow command used by command handler.
 
-### `AppRouteCommand`
-Normalized cross-flow command layer.
-Examples:
+Current commands:
 - `goAuthorizedTab1Root`
 - `goAuthorizedTab2Root`
 - `logoutToOnboarding`
 
-### `AppRouter`
-Single state holder.
-Owns:
-- top-level state (`flow`, `selectedTab`)
-- per-flow paths (`onboardingStack`, `tab1Stack`, `tab2Stack`)
-- global overlays (`successPayload`, `isPaywallPresented`)
+### 3.6 `SuccessPayload`
+Data for global success presentation:
+- title
+- message
+- primary button title
+- `SuccessAction`
 
-### `Coordinator` views
-Compose UI trees and bind to router state using `NavigationStack` and sheet APIs.
+### 3.7 `AppRouter`
+Single navigation state holder (`@MainActor`, `ObservableObject`).
+State groups:
 
-## Interfaces (Protocols)
+1. shared state
+- `flow`
+- `selectedTab`
+- `successPayload`
 
-### `OnboardingRouting`
-Owns onboarding-specific actions:
-- push onboarding route
-- pop onboarding to root
-- present and dismiss paywall
+2. onboarding state
+- `onboardingStack`
+- `isPaywallPresented`
 
-### `Tab1Routing`
-Owns tab1 stack actions:
-- push route
-- pop by count
-- pop to root
+3. feature states
+- `tab1Stack`
+- `tab2Stack`
 
-### `Tab2Routing`
-Owns tab2 stack actions:
-- push route
-- pop by count
-- pop to root
+### 3.8 Routing protocols
+- `OnboardingRouting`
+- `Tab1Routing`
+- `Tab2Routing`
+- `SuccessRouting`
+- `AppRouteCommandHandling`
 
-### `SuccessRouting`
-Owns success overlay lifecycle:
-- present success
-- handle success primary action
+These protocols define the contract surface used by coordinators and command handlers.
 
-### `AppRouteCommandHandling`
-Applies cross-flow command to full router state.
-This is the single place for global reset/switch logic.
+### 3.9 Coordinators
+Coordinators map route state to UI.
+They own screen composition and navigation bindings.
 
-## Architectural Invariants
+## 4. Interface Reference (Current Contracts)
 
-- One source of truth for navigation state: `AppRouter`.
-- Every flow has an isolated route enum and routing protocol.
-- Cross-flow transitions must go through `AppRouteCommand`.
-- Coordinators should not mutate unrelated flow state directly.
-- `pop(n)` must never crash when stack count is less than `n`.
+### 4.1 Router state
 
-## Navigation Operations
+```swift
+@MainActor
+final class AppRouter: ObservableObject {
+    @Published var flow: Flow = .onboarding
+    @Published var selectedTab: Tab = .tab1
+    @Published var successPayload: SuccessPayload?
 
-- `push(route)`
-- `pop(1)`
-- `pop(n)`
-- `popToRoot()`
-- `presentSheet(...)`
-- `dismissSheet()`
-- `presentGlobalSuccess(...)`
-- `handleRouteCommand(...)`
+    @Published var onboardingStack: [OnboardingRoute] = []
+    @Published var isPaywallPresented = false
 
-## Recipe Template (Use For Any New Case)
+    @Published var tab1Stack: [Tab1Route] = []
+    @Published var tab2Stack: [Tab2Route] = []
+}
+```
 
-1. Define or update model (`Flow`, `Tab`, `Route`, `Action`, `Command`).
-2. Extend protocol contract for affected flow only.
-3. Implement in corresponding `AppRouter+<Flow>Routing.swift` extension.
-4. Update coordinator mapping (`navigationDestination`, toolbar/button handlers).
-5. Add command handling if transition is cross-flow.
-6. Add or update unit tests.
-7. Add analytics events for entry, transition, and completion.
+### 4.2 Flow routing protocols
 
-## How To Add Common Cases
+```swift
+@MainActor
+protocol OnboardingRouting: AnyObject {
+    var onboardingStack: [OnboardingRoute] { get set }
+    var isPaywallPresented: Bool { get set }
 
-### 1) Add A New Flow
+    func onboardingPush(_ route: OnboardingRoute)
+    func onboardingPopToRoot()
+    func presentPaywall()
+    func dismissPaywall()
+}
 
-1. Add new case to `Flow`.
-2. Add route model(s) for the flow.
-3. Add router state properties for new flow path and modal state.
-4. Add new protocol `NewFlowRouting`.
-5. Add extension `AppRouter+NewFlowRouting.swift`.
-6. Add `NewFlowCoordinatorView`.
-7. Connect it in `RootCoordinatorView` flow switch.
-8. Add command(s) if other flows can jump to it.
-9. Add tests for entry and reset.
+@MainActor
+protocol Tab1Routing: AnyObject {
+    var tab1Stack: [Tab1Route] { get set }
 
-### 2) Add A New Screen To Existing Flow
+    func tab1Push(_ route: Tab1Route)
+    func tab1Pop(_ n: Int)
+    func tab1PopToRoot()
+}
 
-1. Add enum case to corresponding route.
-2. Add UI screen view.
-3. Update `navigationDestination(for:)` switch.
-4. Add push trigger from current screen.
-5. Add pop/return behavior if needed.
-6. Add test for route transition.
+@MainActor
+protocol Tab2Routing: AnyObject {
+    var tab2Stack: [Tab2Route] { get set }
 
-### 3) Add Tab Bar Or Add New Tab
+    func tab2Push(_ route: Tab2Route)
+    func tab2Pop(_ n: Int)
+    func tab2PopToRoot()
+}
 
-1. Add new case to `Tab`.
-2. Add new route enum and stack state (if new tab needs stack).
-3. Add `NewTabRouting` protocol and extension.
-4. Add tab coordinator.
-5. Wire new tab into `AuthorizedCoordinatorView` `TabView`.
-6. Add command support for selecting/resetting new tab root.
-7. Add tests for tab switch and reset behavior.
+@MainActor
+protocol SuccessRouting: AnyObject {
+    var successPayload: SuccessPayload? { get set }
+    var flow: Flow { get set }
+    var selectedTab: Tab { get set }
 
-### 4) Navigate To Flow Root
+    func presentSuccess(
+        title: String,
+        message: String,
+        primaryButton: String,
+        primaryAction: SuccessAction
+    )
 
-For same flow:
-- call `popToRoot()` in that flow protocol.
+    func handleSuccessPrimary()
+}
+```
 
-For cross-flow root:
-- define/use `AppRouteCommand` and apply in command handler.
+### 4.3 Cross-flow command handling
 
-### 5) Navigate Back N Screens
+```swift
+@MainActor
+protocol AppRouteCommandHandling: AnyObject {
+    func handleRouteCommand(_ command: AppRouteCommand)
+}
+```
 
-1. Use `pop(n)` in flow protocol.
-2. Clamp count safely (`min(max(n, 0), stack.count)`).
-3. No-op if result is zero.
-4. Add tests for `n = 0`, `n < 0`, and `n > stack.count`.
+## 5. Operational Contracts
 
-### 6) Navigate Back To Specific Screen
+### 5.1 Push
+Contract:
+1. append route to target flow stack
+2. no unrelated stack mutation
 
-1. Add helper in flow router extension:
-   - `popTo(_ predicate: (Route) -> Bool)` or
-   - `popTo(routeID)`
-2. Find index from top and trim stack.
-3. No-op if target not found.
-4. Add tests for found/not found cases.
+### 5.2 Pop one / pop N
+Contract:
+1. pop count is clamped with `min(max(n, 0), stack.count)`
+2. if effective count is `0`, operation is no-op
+3. must never crash for out-of-range `n`
 
-### 7) Add Flow-Scoped Common Screen With Parameters
+### 5.3 Pop to root
+Contract:
+1. target stack becomes empty
+2. unrelated stacks unchanged
 
-Use when screen is reusable inside one flow.
+### 5.4 Global success
+Contract:
+1. `presentSuccess(...)` sets payload
+2. `handleSuccessPrimary()` clears payload first
+3. if action maps to command, command handler applies cross-flow transition
+4. if action is `dismiss`, no command is applied
 
-1. Add route case with associated values.
-2. Route to one reusable `CommonScreenView(params:)`.
-3. Keep params value-semantic and serializable when possible.
-4. Add tests for parameter propagation.
+### 5.5 Cross-flow command
+Contract:
+1. command handler is the only place for cross-flow reset/switch behavior
+2. each command must leave router in valid invariant state
 
-### 8) Add App-Global Common Screen
+## 6. Global Invariants
 
-Use when any flow can open same screen (for example success, alert hub, legal modal).
+1. `AppRouter` is the single source of navigation state.
+2. Coordinators do not directly edit unrelated flow stacks.
+3. Cross-flow transitions must go through `AppRouteCommandHandling`.
+4. Flow-specific operations are exposed by flow-specific protocols.
+5. Navigation operations are deterministic and safe for invalid pop counts.
 
-1. Add global payload state to router (`@Published var ...Payload`).
-2. Add present/dismiss API in dedicated routing protocol.
-3. Render from `RootCoordinatorView` as top-level sheet/fullScreenCover.
-4. Add command if action triggers cross-flow transition.
-5. Add tests for presentation and dismissal.
+## 7. Change Playbooks
 
-### 9) Add Navigation Analytics
+All playbooks follow the same skeleton:
 
-Add lightweight event layer, for example:
+1. update model(s)
+2. update protocol contract(s)
+3. update `AppRouter` extension implementation(s)
+4. update coordinator wiring
+5. update tests
+6. update analytics events if required
+
+### 7.1 Add new flow
+
+Touch points:
+- `Flow.swift`
+- new route model file(s)
+- `AppRouter.swift`
+- new `NewFlowRouting` in `FeatureRoutingProtocols.swift`
+- `AppRouter+NewFlowRouting.swift`
+- `RootCoordinatorView.swift`
+- optional `AppRouteCommand.swift` and command handler
+
+Steps:
+1. add flow enum case
+2. add flow route enum and router state stack
+3. add flow routing protocol and extension
+4. create new flow coordinator
+5. add coordinator to root flow switch
+6. add cross-flow command if flow can be entered externally
+7. add tests for entry and reset
+
+Done criteria:
+- flow can be entered and exited
+- no unrelated stacks are corrupted
+
+### 7.2 Add new screen to existing flow
+
+Touch points:
+- route enum of target flow
+- target flow coordinator switch in `navigationDestination`
+- optional reusable screen file in `Views/*`
+
+Steps:
+1. add route case
+2. add destination mapping in coordinator
+3. add trigger (`push`) from source screen
+4. add return behavior if needed
+5. add unit/integration test for transition
+
+Done criteria:
+- new route is reachable
+- back navigation works and preserves stack consistency
+
+### 7.3 Add tab bar or add new tab
+
+Touch points:
+- `Tab.swift`
+- new tab route model
+- `AppRouter.swift` state
+- `FeatureRoutingProtocols.swift` and `AppRouter+NewTabRouting.swift`
+- `AuthorizedCoordinatorView.swift`
+
+Steps:
+1. add tab enum case
+2. add stack state for tab
+3. add routing protocol and extension
+4. add tab coordinator
+5. register in `TabView`
+6. add optional command for tab root switch
+
+Done criteria:
+- independent stack per tab
+- switching tabs does not lose stack state unexpectedly
+
+### 7.4 Navigate to flow root
+
+Same-flow:
+1. call `popToRoot()` in the corresponding flow protocol
+
+Cross-flow:
+1. define command in `AppRouteCommand`
+2. apply state mutation in command handler only
+
+Done criteria:
+- target flow root shown
+- invariant state preserved
+
+### 7.5 Navigate back N screens
+
+Steps:
+1. use `pop(n)` in flow routing extension
+2. clamp count safely
+3. keep no-op for invalid values
+4. test `n=0`, negative `n`, and `n>count`
+
+Done criteria:
+- no crashes
+- deterministic stack outcome
+
+### 7.6 Return to specific screen
+
+Recommended approach:
+1. add helper in flow extension, for example `popTo(where:)`
+2. locate target from top of stack
+3. trim stack accordingly
+4. if missing target, no-op
+
+Done criteria:
+- route found case and not-found case are both covered by tests
+
+### 7.7 Add flow-scoped common screen with parameters
+
+Use case:
+- reusable screen inside one flow only
+
+Steps:
+1. add route case with associated values
+2. create reusable view with typed params
+3. map route to view in that flow coordinator
+4. add tests for parameter propagation
+
+Done criteria:
+- screen is reusable in flow
+- params are explicit and type-safe
+
+### 7.8 Add app-global common screen
+
+Use case:
+- screen can be opened from any flow
+
+Steps:
+1. add global payload state to `AppRouter`
+2. add present/dismiss API in dedicated protocol/extension
+3. render in `RootCoordinatorView` as top-level sheet/full-screen cover
+4. add command mapping if it triggers cross-flow transition
+5. add tests for show/dismiss/command behavior
+
+Done criteria:
+- screen can be opened from all flows
+- global layering is predictable
+
+### 7.9 Add navigation analytics
+
+Recommended event set:
 - `screen_view`
 - `route_push`
 - `route_pop`
@@ -228,62 +386,112 @@ Add lightweight event layer, for example:
 - `tab_switch`
 - `command_applied`
 
-Implementation guideline:
-1. Define analytics protocol (`NavigationAnalyticsTracking`).
-2. Inject tracker into router or command handler.
-3. Emit events where transitions are decided (router extensions, command handler).
-4. Add tests with tracker spy to assert event order.
+Steps:
+1. define `NavigationAnalyticsTracking` protocol
+2. inject tracker into routing extension or command handler
+3. emit events where transition decision is made (not in raw UI body)
+4. test with tracker spy for order and payload
 
-### 10) Return To Specific Screen Across Flows
+Done criteria:
+- stable event schema
+- no duplicate events for a single action
 
-1. Model target as command (`AppRouteCommand`).
-2. Command handler resets irrelevant stacks.
-3. Command handler sets target flow/tab and target route path.
-4. Add tests verifying all unrelated stacks are reset.
+### 7.10 Return to specific screen across flows
 
-### 11) Deep Links
+Steps:
+1. model target via `AppRouteCommand`
+2. command handler resets irrelevant stacks
+3. command handler sets flow/tab and optionally target route path
+4. add tests verifying full state result
 
-1. Parse URL into typed intent.
-2. Map intent to `AppRouteCommand` + optional route payload.
-3. Apply command in one place.
-4. Handle invalid links with fallback route.
-5. Add tests for valid/invalid link mapping.
+Done criteria:
+- transition deterministic from any source state
 
-### 12) State Restoration
+### 7.11 Deep links
 
-1. Serialize `NavigationState` snapshot.
-2. Restore flow/tab/paths on launch.
-3. Validate route payload compatibility on app version changes.
-4. Fallback to safe root when restore fails.
+Steps:
+1. parse URL into typed intent
+2. map intent to command plus optional route payload
+3. apply in a single routing entrypoint
+4. fallback to safe root for invalid/missing data
+5. test valid and invalid links
 
-## Testing Strategy
+Done criteria:
+- unsupported links are safe
+- supported links always resolve to expected state
 
-### Unit tests (required)
-- Router state transitions.
-- Command handling behavior.
-- Route edge cases (`pop(n)`).
+### 7.12 State restoration
 
-### Integration tests (recommended)
-- Coordinator route mapping.
-- Cross-flow command behavior.
+Steps:
+1. define serializable `NavigationStateSnapshot`
+2. restore `flow`, `selectedTab`, and route stacks on launch
+3. validate compatibility for changed route payloads
+4. fallback to safe root if snapshot invalid
 
-### UI tests (selective)
-- Critical user journeys.
-- Smoke tests for startup and logout.
+Done criteria:
+- app reopens in expected place
+- invalid snapshot never crashes navigation
 
-## Anti-Patterns
+## 8. Testing Matrix
 
-- Coordinators mutating unrelated flow state directly.
-- Cross-flow transitions implemented ad hoc in random views.
-- Route enums carrying heavy domain objects.
-- Missing no-op behavior for invalid pop or missing targets.
-- Analytics emitted from views instead of routing layer.
+### 8.1 Unit tests (required)
 
-## Definition Of Done For Navigation Changes
+- flow route push/pop/popToRoot
+- `pop(n)` edge cases
+- command handler state transitions
+- success action to command mapping
 
-- New behavior is represented in model/protocol/extension layers.
-- Coordinator wiring is updated.
-- Cross-flow logic goes through command handler.
-- Unit tests cover transition and edge cases.
-- Analytics events are emitted for key transitions.
-- README recipes are updated when architecture changes.
+Current examples:
+- `SwiftUI-Navigation-PoCTests/AppRouterRouteCommandTests.swift`
+
+### 8.2 Integration tests (recommended)
+
+- coordinator route mapping correctness
+- cross-flow transition execution from UI actions
+
+### 8.3 UI tests (selective)
+
+- startup flow routing
+- onboarding happy path
+- logout reset path
+
+## 9. Analytics Contract (Recommended)
+
+Use structured payloads for every event:
+
+- `event_name`
+- `from_flow`
+- `to_flow`
+- `from_route`
+- `to_route`
+- `tab`
+- `command`
+- `timestamp`
+- `correlation_id`
+
+This enables reconstruction of navigation sessions and debugging of edge transitions.
+
+## 10. Anti-Patterns
+
+1. cross-flow state edits from random coordinator code
+2. untyped route payloads (for example dictionaries)
+3. heavy domain models embedded directly in route enums
+4. duplicated transition logic outside command handler
+5. analytics emitted from multiple layers for one transition
+
+## 11. Definition Of Done For Any Navigation Change
+
+1. model layer updated (`Flow/Route/Action/Command` where needed)
+2. protocol and router extension contracts updated
+3. coordinator mapping updated
+4. tests added or adjusted
+5. analytics updated (if applicable)
+6. README playbook updated if architecture changed
+
+## 12. Quick Decision Guide
+
+- Need transition inside one flow: use flow routing protocol.
+- Need transition across flows or tab roots: use `AppRouteCommand`.
+- Need reusable screen in one flow: use route with associated values.
+- Need reusable screen app-wide: use global payload + root presentation.
+- Need observability: log in routing/command layer, not view body.
