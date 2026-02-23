@@ -1,497 +1,401 @@
-# SwiftUI Navigation PoC
+# SwiftUI Navigation Guide
 
-This README is the canonical navigation guide for this repository.
-It covers:
+Этот документ не про текущее состояние конкретного экрана, а про то, как с нуля собрать масштабируемую навигацию в новом проекте SwiftUI.
 
-1. core navigation entities and interfaces
-2. invariants and state contracts
-3. implementation playbooks for common and advanced navigation changes
+Цели:
 
-## 1. Why This Architecture
+1. единый источник правды для navigation state
+2. безопасные и предсказуемые переходы внутри flow и между flow
+3. простое расширение (новые flow, табы, common-экраны, deeplink, analytics)
+4. тестируемость навигации на уровне unit/integration
 
-Navigation is modeled as explicit state plus typed commands.
-The design goals are:
+## 1. Базовая модель архитектуры
 
-1. single source of truth for navigation state
-2. flow isolation (onboarding, tab1, tab2)
-3. predictable cross-flow transitions
-4. testable routing logic without UI coupling
+Архитектура состоит из 4 слоёв:
 
-## 2. Current Navigation Layout
+1. `Models` (типы навигации)
+- `Flow`
+- `Tab`
+- `Route`-типы по фичам
+- `OverlayPayload`/`SuccessPayload`
+- `NavigationCommand`
+- `NavigationAction` (опционально)
 
-### 2.1 Core
+2. `Router State`
+- единый `AppRouter` c `@Published` state
 
-- `SwiftUI-Navigation-PoC/Navigation/Core/AppRouter.swift`
-- `SwiftUI-Navigation-PoC/Navigation/Core/FeatureRoutingProtocols.swift`
-- `SwiftUI-Navigation-PoC/Navigation/Core/AppRouter+SuccessRouting.swift`
-- `SwiftUI-Navigation-PoC/Navigation/Core/AppRouter+RouteCommandHandling.swift`
-- `SwiftUI-Navigation-PoC/Navigation/Core/RootCoordinatorView.swift`
-- `SwiftUI-Navigation-PoC/Navigation/Core/AuthorizedCoordinatorView.swift`
+3. `Routing Contracts`
+- протоколы по flow (`OnboardingRouting`, `ProfileRouting`, etc.)
+- протоколы для глобальных сценариев (`GlobalOverlayRouting`, `NavigationCommandHandling`)
 
-### 2.2 Flow-specific
+4. `Coordinator Layer`
+- root coordinator выбирает flow
+- flow coordinators мапят route -> screen
+- coordinators вызывают методы routing-протоколов
 
-- `SwiftUI-Navigation-PoC/Navigation/Onboarding/AppRouter+OnboardingRouting.swift`
-- `SwiftUI-Navigation-PoC/Navigation/Onboarding/OnboardingCoordinatorView.swift`
-- `SwiftUI-Navigation-PoC/Navigation/Tab1/AppRouter+Tab1Routing.swift`
-- `SwiftUI-Navigation-PoC/Navigation/Tab1/Tab1CoordinatorView.swift`
-- `SwiftUI-Navigation-PoC/Navigation/Tab2/AppRouter+Tab2Routing.swift`
-- `SwiftUI-Navigation-PoC/Navigation/Tab2/Tab2CoordinatorView.swift`
+## 2. Типовые сущности и интерфейсы
 
-### 2.3 Models
+### 2.1 `Flow`
+Назначение: верхнеуровневый режим приложения.
 
-- `SwiftUI-Navigation-PoC/Navigation/Core/Models/Flow.swift`
-- `SwiftUI-Navigation-PoC/Navigation/Core/Models/Tab.swift`
-- `SwiftUI-Navigation-PoC/Navigation/Core/Models/OnboardingRoute.swift`
-- `SwiftUI-Navigation-PoC/Navigation/Core/Models/Tab1Route.swift`
-- `SwiftUI-Navigation-PoC/Navigation/Core/Models/Tab2Route.swift`
-- `SwiftUI-Navigation-PoC/Navigation/Core/Models/SuccessAction.swift`
-- `SwiftUI-Navigation-PoC/Navigation/Core/Models/SuccessPayload.swift`
-- `SwiftUI-Navigation-PoC/Navigation/Core/Models/AppRouteCommand.swift`
+```swift
+enum Flow: Equatable {
+    case onboarding
+    case authorized
+    case maintenance
+}
+```
 
-## 3. Navigation Entity Catalog
+### 2.2 `Tab`
+Назначение: активный таб в авторизованной части.
 
-### 3.1 `Flow`
-Top-level application mode.
+```swift
+enum Tab: Hashable {
+    case home
+    case profile
+    case settings
+}
+```
 
-Current values:
-- `onboarding`
-- `authorized`
+### 2.3 Route-типы
+Назначение: стек навигации в рамках конкретного flow/tab.
 
-### 3.2 `Tab`
-Selected tab in authorized flow.
+```swift
+enum HomeRoute: Hashable {
+    case details(id: UUID)
+    case filters
+}
 
-Current values:
-- `tab1`
-- `tab2`
+enum ProfileRoute: Hashable {
+    case edit
+    case notifications
+}
+```
 
-### 3.3 `Route` enums
-Each flow has a route enum used by `NavigationStack(path:)`.
+### 2.4 `NavigationCommand`
+Назначение: кросс-flow переходы и reset-операции.
 
-- `OnboardingRoute`
-- `Tab1Route`
-- `Tab2Route`
+```swift
+enum NavigationCommand: Equatable {
+    case goToAuthorized(tab: Tab)
+    case logoutToOnboarding
+    case openFlowRoot(flow: Flow)
+}
+```
 
-### 3.4 `SuccessAction`
-Action selected on global success UI.
-It is mapped to cross-flow command via `routeCommand`.
+### 2.5 `OverlayPayload` (или `SuccessPayload`)
+Назначение: глобальные экраны/оверлеи, доступные из любого flow.
 
-### 3.5 `AppRouteCommand`
-Typed cross-flow command used by command handler.
+```swift
+struct SuccessPayload: Identifiable, Equatable {
+    let id = UUID()
+    let title: String
+    let message: String
+    let primaryAction: SuccessAction
+}
+```
 
-Current commands:
-- `goAuthorizedTab1Root`
-- `goAuthorizedTab2Root`
-- `logoutToOnboarding`
-
-### 3.6 `SuccessPayload`
-Data for global success presentation:
-- title
-- message
-- primary button title
-- `SuccessAction`
-
-### 3.7 `AppRouter`
-Single navigation state holder (`@MainActor`, `ObservableObject`).
-State groups:
-
-1. shared state
-- `flow`
-- `selectedTab`
-- `successPayload`
-
-2. onboarding state
-- `onboardingStack`
-- `isPaywallPresented`
-
-3. feature states
-- `tab1Stack`
-- `tab2Stack`
-
-### 3.8 Routing protocols
-- `OnboardingRouting`
-- `Tab1Routing`
-- `Tab2Routing`
-- `SuccessRouting`
-- `AppRouteCommandHandling`
-
-These protocols define the contract surface used by coordinators and command handlers.
-
-### 3.9 Coordinators
-Coordinators map route state to UI.
-They own screen composition and navigation bindings.
-
-## 4. Interface Reference (Current Contracts)
-
-### 4.1 Router state
+### 2.6 `AppRouter`
+Назначение: единый navigation state.
 
 ```swift
 @MainActor
 final class AppRouter: ObservableObject {
     @Published var flow: Flow = .onboarding
-    @Published var selectedTab: Tab = .tab1
+    @Published var selectedTab: Tab = .home
+
+    @Published var homeStack: [HomeRoute] = []
+    @Published var profileStack: [ProfileRoute] = []
+
     @Published var successPayload: SuccessPayload?
-
-    @Published var onboardingStack: [OnboardingRoute] = []
     @Published var isPaywallPresented = false
-
-    @Published var tab1Stack: [Tab1Route] = []
-    @Published var tab2Stack: [Tab2Route] = []
 }
 ```
 
-### 4.2 Flow routing protocols
+### 2.7 Routing-протоколы
+Назначение: ограничить API фичи только нужными операциями.
 
 ```swift
 @MainActor
-protocol OnboardingRouting: AnyObject {
-    var onboardingStack: [OnboardingRoute] { get set }
-    var isPaywallPresented: Bool { get set }
-
-    func onboardingPush(_ route: OnboardingRoute)
-    func onboardingPopToRoot()
-    func presentPaywall()
-    func dismissPaywall()
+protocol HomeRouting: AnyObject {
+    var homeStack: [HomeRoute] { get set }
+    func homePush(_ route: HomeRoute)
+    func homePop(_ n: Int)
+    func homePopToRoot()
 }
 
 @MainActor
-protocol Tab1Routing: AnyObject {
-    var tab1Stack: [Tab1Route] { get set }
-
-    func tab1Push(_ route: Tab1Route)
-    func tab1Pop(_ n: Int)
-    func tab1PopToRoot()
-}
-
-@MainActor
-protocol Tab2Routing: AnyObject {
-    var tab2Stack: [Tab2Route] { get set }
-
-    func tab2Push(_ route: Tab2Route)
-    func tab2Pop(_ n: Int)
-    func tab2PopToRoot()
-}
-
-@MainActor
-protocol SuccessRouting: AnyObject {
+protocol GlobalOverlayRouting: AnyObject {
     var successPayload: SuccessPayload? { get set }
-    var flow: Flow { get set }
-    var selectedTab: Tab { get set }
+    func presentSuccess(_ payload: SuccessPayload)
+    func dismissSuccess()
+}
 
-    func presentSuccess(
-        title: String,
-        message: String,
-        primaryButton: String,
-        primaryAction: SuccessAction
-    )
-
-    func handleSuccessPrimary()
+@MainActor
+protocol NavigationCommandHandling: AnyObject {
+    func handleCommand(_ command: NavigationCommand)
 }
 ```
 
-### 4.3 Cross-flow command handling
+### 2.8 `Coordinator`
+Назначение: UI-композиция и привязка к state.
+
+- `RootCoordinator`: switch по `flow`, глобальные sheet/fullScreenCover.
+- `FlowCoordinator`: `NavigationStack(path:)` + `navigationDestination`.
+
+### 2.9 `NavigationAnalyticsTracking`
+Назначение: централизованная аналитика переходов.
 
 ```swift
-@MainActor
-protocol AppRouteCommandHandling: AnyObject {
-    func handleRouteCommand(_ command: AppRouteCommand)
+protocol NavigationAnalyticsTracking: AnyObject {
+    func track(_ event: NavigationEvent)
 }
 ```
 
-## 5. Operational Contracts
-
-### 5.1 Push
-Contract:
-1. append route to target flow stack
-2. no unrelated stack mutation
-
-### 5.2 Pop one / pop N
-Contract:
-1. pop count is clamped with `min(max(n, 0), stack.count)`
-2. if effective count is `0`, operation is no-op
-3. must never crash for out-of-range `n`
-
-### 5.3 Pop to root
-Contract:
-1. target stack becomes empty
-2. unrelated stacks unchanged
-
-### 5.4 Global success
-Contract:
-1. `presentSuccess(...)` sets payload
-2. `handleSuccessPrimary()` clears payload first
-3. if action maps to command, command handler applies cross-flow transition
-4. if action is `dismiss`, no command is applied
-
-### 5.5 Cross-flow command
-Contract:
-1. command handler is the only place for cross-flow reset/switch behavior
-2. each command must leave router in valid invariant state
-
-## 6. Global Invariants
-
-1. `AppRouter` is the single source of navigation state.
-2. Coordinators do not directly edit unrelated flow stacks.
-3. Cross-flow transitions must go through `AppRouteCommandHandling`.
-4. Flow-specific operations are exposed by flow-specific protocols.
-5. Navigation operations are deterministic and safe for invalid pop counts.
-
-## 7. Change Playbooks
-
-All playbooks follow the same skeleton:
-
-1. update model(s)
-2. update protocol contract(s)
-3. update `AppRouter` extension implementation(s)
-4. update coordinator wiring
-5. update tests
-6. update analytics events if required
-
-### 7.1 Add new flow
-
-Touch points:
-- `Flow.swift`
-- new route model file(s)
-- `AppRouter.swift`
-- new `NewFlowRouting` in `FeatureRoutingProtocols.swift`
-- `AppRouter+NewFlowRouting.swift`
-- `RootCoordinatorView.swift`
-- optional `AppRouteCommand.swift` and command handler
-
-Steps:
-1. add flow enum case
-2. add flow route enum and router state stack
-3. add flow routing protocol and extension
-4. create new flow coordinator
-5. add coordinator to root flow switch
-6. add cross-flow command if flow can be entered externally
-7. add tests for entry and reset
-
-Done criteria:
-- flow can be entered and exited
-- no unrelated stacks are corrupted
-
-### 7.2 Add new screen to existing flow
-
-Touch points:
-- route enum of target flow
-- target flow coordinator switch in `navigationDestination`
-- optional reusable screen file in `Views/*`
-
-Steps:
-1. add route case
-2. add destination mapping in coordinator
-3. add trigger (`push`) from source screen
-4. add return behavior if needed
-5. add unit/integration test for transition
-
-Done criteria:
-- new route is reachable
-- back navigation works and preserves stack consistency
-
-### 7.3 Add tab bar or add new tab
-
-Touch points:
-- `Tab.swift`
-- new tab route model
-- `AppRouter.swift` state
-- `FeatureRoutingProtocols.swift` and `AppRouter+NewTabRouting.swift`
-- `AuthorizedCoordinatorView.swift`
-
-Steps:
-1. add tab enum case
-2. add stack state for tab
-3. add routing protocol and extension
-4. add tab coordinator
-5. register in `TabView`
-6. add optional command for tab root switch
-
-Done criteria:
-- independent stack per tab
-- switching tabs does not lose stack state unexpectedly
-
-### 7.4 Navigate to flow root
-
-Same-flow:
-1. call `popToRoot()` in the corresponding flow protocol
-
-Cross-flow:
-1. define command in `AppRouteCommand`
-2. apply state mutation in command handler only
-
-Done criteria:
-- target flow root shown
-- invariant state preserved
-
-### 7.5 Navigate back N screens
-
-Steps:
-1. use `pop(n)` in flow routing extension
-2. clamp count safely
-3. keep no-op for invalid values
-4. test `n=0`, negative `n`, and `n>count`
-
-Done criteria:
-- no crashes
-- deterministic stack outcome
-
-### 7.6 Return to specific screen
-
-Recommended approach:
-1. add helper in flow extension, for example `popTo(where:)`
-2. locate target from top of stack
-3. trim stack accordingly
-4. if missing target, no-op
+## 3. Контракты и инварианты
 
-Done criteria:
-- route found case and not-found case are both covered by tests
+1. `AppRouter` — единственный источник navigation state.
+2. Внутрифлоу-операции не мутируют state чужих flow.
+3. Кросс-flow переходы делаются только через `NavigationCommand`.
+4. `pop(n)` безопасен для любых `n` (включая `n <= 0` и `n > stack.count`).
+5. Глобальные оверлеи рендерятся на root-уровне.
+6. Слой UI не содержит бизнес-логики переходов между flow.
 
-### 7.7 Add flow-scoped common screen with parameters
+## 4. Bootstrap нового проекта (пошагово)
 
-Use case:
-- reusable screen inside one flow only
+1. Определи `Flow`, `Tab`, route-типы по фичам.
+2. Создай `AppRouter` с `@Published` state для каждого flow/tab/overlay.
+3. Создай routing-протоколы по фичам.
+4. Реализуй протоколы в `AppRouter` через extension по одному flow на файл.
+5. Добавь `NavigationCommand` и `NavigationCommandHandling` для кросс-flow.
+6. Реализуй `RootCoordinator`.
+7. Реализуй `FlowCoordinator` для каждого flow/tab.
+8. Добавь common/global overlays (sheet/fullScreenCover).
+9. Добавь unit-тесты роутера и command handler.
+10. Добавь аналитику переходов в routing layer.
 
-Steps:
-1. add route case with associated values
-2. create reusable view with typed params
-3. map route to view in that flow coordinator
-4. add tests for parameter propagation
+## 5. Playbook: как добавлять кейсы
 
-Done criteria:
-- screen is reusable in flow
-- params are explicit and type-safe
+Ниже типовые изменения, которые покрывают большинство задач.
 
-### 7.8 Add app-global common screen
+### 5.1 Добавление нового flow
 
-Use case:
-- screen can be opened from any flow
+Что добавить:
 
-Steps:
-1. add global payload state to `AppRouter`
-2. add present/dismiss API in dedicated protocol/extension
-3. render in `RootCoordinatorView` as top-level sheet/full-screen cover
-4. add command mapping if it triggers cross-flow transition
-5. add tests for show/dismiss/command behavior
+1. новый кейс в `Flow`
+2. route-тип(ы) flow
+3. state в `AppRouter` (`[NewFlowRoute]`, модалки)
+4. `NewFlowRouting` протокол
+5. `AppRouter+NewFlowRouting.swift`
+6. `NewFlowCoordinator`
+7. ветку в `RootCoordinator` switch
+8. (опционально) команды в `NavigationCommand`
 
-Done criteria:
-- screen can be opened from all flows
-- global layering is predictable
+Проверки:
 
-### 7.9 Add navigation analytics
+1. flow открывается из root
+2. reset из этого flow корректен
+3. чужие стеки не ломаются
 
-Recommended event set:
-- `screen_view`
-- `route_push`
-- `route_pop`
-- `flow_switch`
-- `tab_switch`
-- `command_applied`
+### 5.2 Добавление нового экрана во flow
 
-Steps:
-1. define `NavigationAnalyticsTracking` protocol
-2. inject tracker into routing extension or command handler
-3. emit events where transition decision is made (not in raw UI body)
-4. test with tracker spy for order and payload
+Что сделать:
 
-Done criteria:
-- stable event schema
-- no duplicate events for a single action
+1. добавить кейс в route enum
+2. добавить destination в coordinator switch
+3. добавить trigger (`push`) из текущего экрана
+4. добавить возврат (`pop`, `popToRoot`, `pop(n)` по необходимости)
 
-### 7.10 Return to specific screen across flows
+Проверки:
 
-Steps:
-1. model target via `AppRouteCommand`
-2. command handler resets irrelevant stacks
-3. command handler sets flow/tab and optionally target route path
-4. add tests verifying full state result
+1. экран достижим
+2. back-навигация корректна
+3. edge-cases pop не приводят к крэшу
 
-Done criteria:
-- transition deterministic from any source state
+### 5.3 Добавление tab bar / нового таба
 
-### 7.11 Deep links
+Что сделать:
 
-Steps:
-1. parse URL into typed intent
-2. map intent to command plus optional route payload
-3. apply in a single routing entrypoint
-4. fallback to safe root for invalid/missing data
-5. test valid and invalid links
+1. расширить `Tab`
+2. добавить route enum и stack state для нового таба
+3. добавить `NewTabRouting`
+4. добавить extension с `push/pop/popToRoot`
+5. подключить coordinator в `TabView`
+6. добавить команду выбора таба (при необходимости)
 
-Done criteria:
-- unsupported links are safe
-- supported links always resolve to expected state
+Проверки:
 
-### 7.12 State restoration
+1. отдельный стек у каждого таба
+2. переключение табов не теряет state непредсказуемо
 
-Steps:
-1. define serializable `NavigationStateSnapshot`
-2. restore `flow`, `selectedTab`, and route stacks on launch
-3. validate compatibility for changed route payloads
-4. fallback to safe root if snapshot invalid
+### 5.4 Переход в начало flow
 
-Done criteria:
-- app reopens in expected place
-- invalid snapshot never crashes navigation
+Вариант A (внутри flow):
 
-## 8. Testing Matrix
+1. вызвать `popToRoot()` нужного flow
 
-### 8.1 Unit tests (required)
+Вариант B (кросс-flow):
 
-- flow route push/pop/popToRoot
-- `pop(n)` edge cases
-- command handler state transitions
-- success action to command mapping
+1. добавить `NavigationCommand.openFlowRoot(...)`
+2. реализовать state-reset в command handler
 
-Current examples:
-- `SwiftUI-Navigation-PoCTests/AppRouterRouteCommandTests.swift`
+### 5.5 Переход на N экранов назад
 
-### 8.2 Integration tests (recommended)
+Реализация:
 
-- coordinator route mapping correctness
-- cross-flow transition execution from UI actions
+1. `let count = min(max(n, 0), stack.count)`
+2. `guard count > 0 else { return }`
+3. `stack.removeLast(count)`
 
-### 8.3 UI tests (selective)
+Тесты:
 
-- startup flow routing
-- onboarding happy path
-- logout reset path
+1. `n = 0`
+2. `n < 0`
+3. `n > count`
 
-## 9. Analytics Contract (Recommended)
+### 5.6 Добавление common-экрана внутри flow с параметрами
 
-Use structured payloads for every event:
+Реализация:
 
-- `event_name`
-- `from_flow`
-- `to_flow`
-- `from_route`
-- `to_route`
-- `tab`
-- `command`
-- `timestamp`
-- `correlation_id`
+1. кейс route с associated values
+2. один reusable экран `CommonXView(params:)`
+3. destination mapping в этом flow coordinator
+4. только flow-level routing API
 
-This enables reconstruction of navigation sessions and debugging of edge transitions.
+Тесты:
 
-## 10. Anti-Patterns
+1. параметры доходят до экрана
+2. разные входные параметры дают корректные экраны
 
-1. cross-flow state edits from random coordinator code
-2. untyped route payloads (for example dictionaries)
-3. heavy domain models embedded directly in route enums
-4. duplicated transition logic outside command handler
-5. analytics emitted from multiple layers for one transition
+### 5.7 Добавление common-экрана для всего приложения
 
-## 11. Definition Of Done For Any Navigation Change
+Реализация:
 
-1. model layer updated (`Flow/Route/Action/Command` where needed)
-2. protocol and router extension contracts updated
-3. coordinator mapping updated
-4. tests added or adjusted
-5. analytics updated (if applicable)
-6. README playbook updated if architecture changed
+1. добавить global payload state в `AppRouter`
+2. добавить протокол `GlobalOverlayRouting`
+3. рендерить экран в `RootCoordinator` как global sheet/fullScreenCover
+4. если экран вызывает кросс-flow переход, использовать `NavigationCommand`
 
-## 12. Quick Decision Guide
+Тесты:
 
-- Need transition inside one flow: use flow routing protocol.
-- Need transition across flows or tab roots: use `AppRouteCommand`.
-- Need reusable screen in one flow: use route with associated values.
-- Need reusable screen app-wide: use global payload + root presentation.
-- Need observability: log in routing/command layer, not view body.
+1. экран открывается из любого flow
+2. корректно закрывается
+3. action приводит к ожидаемому command
+
+### 5.8 Добавление аналитики
+
+Рекомендованный минимум событий:
+
+1. `screen_view`
+2. `route_push`
+3. `route_pop`
+4. `flow_switch`
+5. `tab_switch`
+6. `command_applied`
+
+Где отправлять:
+
+1. в routing extension
+2. в command handler
+
+Где не отправлять:
+
+1. в случайных местах в `body` SwiftUI view
+
+### 5.9 Возврат на определенный экран
+
+Внутри flow:
+
+1. добавить helper `popTo(where:)` или `popTo(routeID:)`
+2. найти таргет в стеке
+3. удалить хвост стека
+4. если не найден, no-op
+
+Кросс-flow:
+
+1. описать target через `NavigationCommand`
+2. применить через command handler
+
+### 5.10 Deep links
+
+Реализация:
+
+1. parser URL -> typed intent
+2. mapper intent -> `NavigationCommand` + route payload
+3. единая entrypoint-функция применения deeplink
+4. safe fallback при невалидном линке
+
+### 5.11 State restoration
+
+Реализация:
+
+1. сериализуемый snapshot navigation state
+2. восстановление `flow`, `tab`, стеков на старте
+3. совместимость версий payload
+4. fallback в root при ошибке восстановления
+
+## 6. Рекомендуемая структура файлов в новом проекте
+
+```text
+Navigation/
+  Core/
+    AppRouter.swift
+    NavigationContracts.swift
+    AppRouter+CommandHandling.swift
+    RootCoordinatorView.swift
+  Flows/
+    Onboarding/
+      OnboardingRoute.swift
+      OnboardingRouting.swift
+      AppRouter+OnboardingRouting.swift
+      OnboardingCoordinatorView.swift
+    Home/
+      HomeRoute.swift
+      HomeRouting.swift
+      AppRouter+HomeRouting.swift
+      HomeCoordinatorView.swift
+  Global/
+    GlobalOverlayModels.swift
+    AppRouter+GlobalOverlayRouting.swift
+  Commands/
+    NavigationCommand.swift
+  Analytics/
+    NavigationAnalyticsTracking.swift
+```
+
+## 7. Тестовый план
+
+### Unit (обязательно)
+
+1. push/pop/popToRoot/pop(n)
+2. command handling
+3. mapping `SuccessAction -> NavigationCommand`
+4. no-op сценарии
+
+### Integration (желательно)
+
+1. coordinator route mapping
+2. cross-flow actions from user intents
+
+### UI (точечно)
+
+1. startup flow
+2. happy path onboarding -> authorized
+3. logout reset
+
+## 8. Definition of Done для навигационных изменений
+
+1. добавлен/обновлен model (`Flow/Route/Command/Action`)
+2. добавлен/обновлен protocol contract
+3. добавлен/обновлен router extension
+4. обновлены coordinators
+5. добавлены тесты
+6. обновлена документация
+
+## 9. Антипаттерны
+
+1. мутировать state другого flow из UI-кода фичи
+2. дублировать кросс-flow логику в нескольких местах
+3. хранить тяжёлые доменные модели в route enum
+4. делать небезопасный `pop` без clamping
+5. отправлять analytics из множества слоев для одного перехода
