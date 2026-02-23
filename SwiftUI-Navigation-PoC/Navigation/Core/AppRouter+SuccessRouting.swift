@@ -26,33 +26,7 @@ extension AppRouter: SuccessRouting {
         guard let payload = successPayload else { return }
         successPayload = nil
 
-        switch payload.primaryAction {
-        case .dismiss:
-            break
-
-        case .goAuthorizedTab1Root:
-            onboardingPopToRoot()
-            tab1PopToRoot()
-            tab2PopToRoot()
-            dismissPaywall()
-            flow = .authorized
-            selectedTab = .tab1
-
-        case .goAuthorizedTab2Root:
-            onboardingPopToRoot()
-            tab1PopToRoot()
-            tab2PopToRoot()
-            dismissPaywall()
-            flow = .authorized
-            selectedTab = .tab2
-
-        case .logoutToOnboarding:
-            tab1PopToRoot()
-            tab2PopToRoot()
-            selectedTab = .tab1
-            flow = .onboarding
-            onboardingPopToRoot()
-            dismissPaywall()
-        }
+        guard let command = payload.primaryAction.routeCommand else { return }
+        handleRouteCommand(command)
     }
 }
