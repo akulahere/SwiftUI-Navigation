@@ -1,42 +1,42 @@
 # SwiftUI Navigation Guide
 
-Этот документ не про текущее состояние конкретного экрана, а про то, как с нуля собрать масштабируемую навигацию в новом проекте SwiftUI.
+This document is a practical blueprint for building scalable navigation from scratch in a new SwiftUI project.
 
-Цели:
+Goals:
 
-1. единый источник правды для navigation state
-2. безопасные и предсказуемые переходы внутри flow и между flow
-3. простое расширение (новые flow, табы, common-экраны, deeplink, analytics)
-4. тестируемость навигации на уровне unit/integration
+1. a single source of truth for navigation state
+2. safe and predictable transitions within a flow and across flows
+3. easy extensibility (new flows, tabs, common screens, deep links, analytics)
+4. testable navigation logic at unit and integration levels
 
-## 1. Базовая модель архитектуры
+## 1. Core Architecture Model
 
-Архитектура состоит из 4 слоёв:
+The architecture has 4 layers:
 
-1. `Models` (типы навигации)
+1. `Models` (navigation types)
 - `Flow`
 - `Tab`
-- `Route`-типы по фичам
-- `OverlayPayload`/`SuccessPayload`
+- feature-specific `Route` types
+- `OverlayPayload` / `SuccessPayload`
 - `NavigationCommand`
-- `NavigationAction` (опционально)
+- `NavigationAction` (optional)
 
 2. `Router State`
-- единый `AppRouter` c `@Published` state
+- one shared `AppRouter` with `@Published` state
 
 3. `Routing Contracts`
-- протоколы по flow (`OnboardingRouting`, `ProfileRouting`, etc.)
-- протоколы для глобальных сценариев (`GlobalOverlayRouting`, `NavigationCommandHandling`)
+- flow-specific protocols (`OnboardingRouting`, `ProfileRouting`, etc.)
+- global protocols (`GlobalOverlayRouting`, `NavigationCommandHandling`)
 
 4. `Coordinator Layer`
-- root coordinator выбирает flow
-- flow coordinators мапят route -> screen
-- coordinators вызывают методы routing-протоколов
+- root coordinator selects the active flow
+- flow coordinators map route -> screen
+- coordinators call methods from routing protocols
 
-## 2. Типовые сущности и интерфейсы
+## 2. Standard Entities and Interfaces
 
 ### 2.1 `Flow`
-Назначение: верхнеуровневый режим приложения.
+Purpose: top-level application mode.
 
 ```swift
 enum Flow: Equatable {
@@ -47,7 +47,7 @@ enum Flow: Equatable {
 ```
 
 ### 2.2 `Tab`
-Назначение: активный таб в авторизованной части.
+Purpose: active tab in the authorized area.
 
 ```swift
 enum Tab: Hashable {
@@ -57,8 +57,8 @@ enum Tab: Hashable {
 }
 ```
 
-### 2.3 Route-типы
-Назначение: стек навигации в рамках конкретного flow/tab.
+### 2.3 Route types
+Purpose: navigation stack state within a specific flow/tab.
 
 ```swift
 enum HomeRoute: Hashable {
@@ -73,7 +73,7 @@ enum ProfileRoute: Hashable {
 ```
 
 ### 2.4 `NavigationCommand`
-Назначение: кросс-flow переходы и reset-операции.
+Purpose: cross-flow transitions and reset operations.
 
 ```swift
 enum NavigationCommand: Equatable {
@@ -83,8 +83,8 @@ enum NavigationCommand: Equatable {
 }
 ```
 
-### 2.5 `OverlayPayload` (или `SuccessPayload`)
-Назначение: глобальные экраны/оверлеи, доступные из любого flow.
+### 2.5 `OverlayPayload` (or `SuccessPayload`)
+Purpose: global screens/overlays that can be triggered from any flow.
 
 ```swift
 struct SuccessPayload: Identifiable, Equatable {
@@ -96,7 +96,7 @@ struct SuccessPayload: Identifiable, Equatable {
 ```
 
 ### 2.6 `AppRouter`
-Назначение: единый navigation state.
+Purpose: single navigation state container.
 
 ```swift
 @MainActor
@@ -112,8 +112,8 @@ final class AppRouter: ObservableObject {
 }
 ```
 
-### 2.7 Routing-протоколы
-Назначение: ограничить API фичи только нужными операциями.
+### 2.7 Routing protocols
+Purpose: limit each feature to only the navigation API it needs.
 
 ```swift
 @MainActor
@@ -138,13 +138,13 @@ protocol NavigationCommandHandling: AnyObject {
 ```
 
 ### 2.8 `Coordinator`
-Назначение: UI-композиция и привязка к state.
+Purpose: UI composition and binding to state.
 
-- `RootCoordinator`: switch по `flow`, глобальные sheet/fullScreenCover.
-- `FlowCoordinator`: `NavigationStack(path:)` + `navigationDestination`.
+- `RootCoordinator`: switches by `flow`, hosts global sheet/fullScreenCover.
+- `FlowCoordinator`: owns `NavigationStack(path:)` and `navigationDestination`.
 
 ### 2.9 `NavigationAnalyticsTracking`
-Назначение: централизованная аналитика переходов.
+Purpose: centralized navigation analytics.
 
 ```swift
 protocol NavigationAnalyticsTracking: AnyObject {
@@ -152,139 +152,139 @@ protocol NavigationAnalyticsTracking: AnyObject {
 }
 ```
 
-## 3. Контракты и инварианты
+## 3. Contracts and Invariants
 
-1. `AppRouter` — единственный источник navigation state.
-2. Внутрифлоу-операции не мутируют state чужих flow.
-3. Кросс-flow переходы делаются только через `NavigationCommand`.
-4. `pop(n)` безопасен для любых `n` (включая `n <= 0` и `n > stack.count`).
-5. Глобальные оверлеи рендерятся на root-уровне.
-6. Слой UI не содержит бизнес-логики переходов между flow.
+1. `AppRouter` is the only source of navigation state.
+2. Intra-flow operations must not mutate state of unrelated flows.
+3. Cross-flow transitions must go through `NavigationCommand`.
+4. `pop(n)` must be safe for any `n` (including `n <= 0` and `n > stack.count`).
+5. Global overlays must be rendered at root level.
+6. UI layer must not contain business logic for cross-flow transitions.
 
-## 4. Bootstrap нового проекта (пошагово)
+## 4. New Project Bootstrap (Step-by-step)
 
-1. Определи `Flow`, `Tab`, route-типы по фичам.
-2. Создай `AppRouter` с `@Published` state для каждого flow/tab/overlay.
-3. Создай routing-протоколы по фичам.
-4. Реализуй протоколы в `AppRouter` через extension по одному flow на файл.
-5. Добавь `NavigationCommand` и `NavigationCommandHandling` для кросс-flow.
-6. Реализуй `RootCoordinator`.
-7. Реализуй `FlowCoordinator` для каждого flow/tab.
-8. Добавь common/global overlays (sheet/fullScreenCover).
-9. Добавь unit-тесты роутера и command handler.
-10. Добавь аналитику переходов в routing layer.
+1. Define `Flow`, `Tab`, and route types by feature.
+2. Create `AppRouter` with `@Published` state for each flow/tab/overlay.
+3. Create routing protocols by feature.
+4. Implement protocols in `AppRouter` using one extension per flow.
+5. Add `NavigationCommand` and `NavigationCommandHandling` for cross-flow logic.
+6. Implement `RootCoordinator`.
+7. Implement `FlowCoordinator` for each flow/tab.
+8. Add common/global overlays (sheet/fullScreenCover).
+9. Add unit tests for router and command handler.
+10. Add navigation analytics in the routing layer.
 
-## 5. Playbook: как добавлять кейсы
+## 5. Playbook: How to Add Common Cases
 
-Ниже типовые изменения, которые покрывают большинство задач.
+The cases below cover most real-world navigation changes.
 
-### 5.1 Добавление нового flow
+### 5.1 Add a new flow
 
-Что добавить:
+What to add:
 
-1. новый кейс в `Flow`
-2. route-тип(ы) flow
-3. state в `AppRouter` (`[NewFlowRoute]`, модалки)
-4. `NewFlowRouting` протокол
+1. a new case in `Flow`
+2. route type(s) for the flow
+3. state in `AppRouter` (`[NewFlowRoute]`, modal flags)
+4. `NewFlowRouting` protocol
 5. `AppRouter+NewFlowRouting.swift`
 6. `NewFlowCoordinator`
-7. ветку в `RootCoordinator` switch
-8. (опционально) команды в `NavigationCommand`
+7. a new branch in `RootCoordinator` switch
+8. (optional) related commands in `NavigationCommand`
 
-Проверки:
+Validation:
 
-1. flow открывается из root
-2. reset из этого flow корректен
-3. чужие стеки не ломаются
+1. flow is reachable from root
+2. reset from this flow is correct
+3. unrelated stacks remain intact
 
-### 5.2 Добавление нового экрана во flow
+### 5.2 Add a new screen inside a flow
 
-Что сделать:
+What to do:
 
-1. добавить кейс в route enum
-2. добавить destination в coordinator switch
-3. добавить trigger (`push`) из текущего экрана
-4. добавить возврат (`pop`, `popToRoot`, `pop(n)` по необходимости)
+1. add a new route case
+2. add destination mapping in coordinator switch
+3. add trigger (`push`) from source screen
+4. add return behavior (`pop`, `popToRoot`, `pop(n)`) if needed
 
-Проверки:
+Validation:
 
-1. экран достижим
-2. back-навигация корректна
-3. edge-cases pop не приводят к крэшу
+1. screen is reachable
+2. back navigation is correct
+3. pop edge cases do not crash
 
-### 5.3 Добавление tab bar / нового таба
+### 5.3 Add tab bar / add a new tab
 
-Что сделать:
+What to do:
 
-1. расширить `Tab`
-2. добавить route enum и stack state для нового таба
-3. добавить `NewTabRouting`
-4. добавить extension с `push/pop/popToRoot`
-5. подключить coordinator в `TabView`
-6. добавить команду выбора таба (при необходимости)
+1. extend `Tab`
+2. add route enum and stack state for the new tab
+3. add `NewTabRouting`
+4. add extension with `push/pop/popToRoot`
+5. register coordinator in `TabView`
+6. add tab selection command if needed
 
-Проверки:
+Validation:
 
-1. отдельный стек у каждого таба
-2. переключение табов не теряет state непредсказуемо
+1. each tab has independent stack
+2. tab switching does not lose state unexpectedly
 
-### 5.4 Переход в начало flow
+### 5.4 Navigate to flow root
 
-Вариант A (внутри flow):
+Option A (inside same flow):
 
-1. вызвать `popToRoot()` нужного flow
+1. call flow-specific `popToRoot()`
 
-Вариант B (кросс-flow):
+Option B (cross-flow):
 
-1. добавить `NavigationCommand.openFlowRoot(...)`
-2. реализовать state-reset в command handler
+1. add `NavigationCommand.openFlowRoot(...)`
+2. implement state reset in command handler
 
-### 5.5 Переход на N экранов назад
+### 5.5 Navigate back N screens
 
-Реализация:
+Implementation:
 
 1. `let count = min(max(n, 0), stack.count)`
 2. `guard count > 0 else { return }`
 3. `stack.removeLast(count)`
 
-Тесты:
+Tests:
 
 1. `n = 0`
 2. `n < 0`
 3. `n > count`
 
-### 5.6 Добавление common-экрана внутри flow с параметрами
+### 5.6 Add a flow-scoped common screen with parameters
 
-Реализация:
+Implementation:
 
-1. кейс route с associated values
-2. один reusable экран `CommonXView(params:)`
-3. destination mapping в этом flow coordinator
-4. только flow-level routing API
+1. add route case with associated values
+2. use one reusable screen, for example `CommonXView(params:)`
+3. map route in that flow coordinator
+4. keep navigation API flow-scoped
 
-Тесты:
+Tests:
 
-1. параметры доходят до экрана
-2. разные входные параметры дают корректные экраны
+1. parameters reach the destination correctly
+2. different inputs produce expected navigation outcomes
 
-### 5.7 Добавление common-экрана для всего приложения
+### 5.7 Add an app-global common screen
 
-Реализация:
+Implementation:
 
-1. добавить global payload state в `AppRouter`
-2. добавить протокол `GlobalOverlayRouting`
-3. рендерить экран в `RootCoordinator` как global sheet/fullScreenCover
-4. если экран вызывает кросс-flow переход, использовать `NavigationCommand`
+1. add global payload state to `AppRouter`
+2. add `GlobalOverlayRouting` protocol
+3. render at root as global sheet/fullScreenCover
+4. if action triggers cross-flow transition, use `NavigationCommand`
 
-Тесты:
+Tests:
 
-1. экран открывается из любого flow
-2. корректно закрывается
-3. action приводит к ожидаемому command
+1. screen opens from any flow
+2. screen dismisses correctly
+3. action maps to expected command
 
-### 5.8 Добавление аналитики
+### 5.8 Add analytics
 
-Рекомендованный минимум событий:
+Recommended minimum events:
 
 1. `screen_view`
 2. `route_push`
@@ -293,48 +293,48 @@ protocol NavigationAnalyticsTracking: AnyObject {
 5. `tab_switch`
 6. `command_applied`
 
-Где отправлять:
+Where to emit:
 
-1. в routing extension
-2. в command handler
+1. routing extensions
+2. command handler
 
-Где не отправлять:
+Where not to emit:
 
-1. в случайных местах в `body` SwiftUI view
+1. ad-hoc from random places in SwiftUI `body`
 
-### 5.9 Возврат на определенный экран
+### 5.9 Return to a specific screen
 
-Внутри flow:
+Inside one flow:
 
-1. добавить helper `popTo(where:)` или `popTo(routeID:)`
-2. найти таргет в стеке
-3. удалить хвост стека
-4. если не найден, no-op
+1. add helper like `popTo(where:)` or `popTo(routeID:)`
+2. find target in stack
+3. trim stack tail
+4. no-op if target not found
 
-Кросс-flow:
+Across flows:
 
-1. описать target через `NavigationCommand`
-2. применить через command handler
+1. represent target as `NavigationCommand`
+2. apply via command handler
 
 ### 5.10 Deep links
 
-Реализация:
+Implementation:
 
-1. parser URL -> typed intent
-2. mapper intent -> `NavigationCommand` + route payload
-3. единая entrypoint-функция применения deeplink
-4. safe fallback при невалидном линке
+1. parse URL -> typed intent
+2. map intent -> `NavigationCommand` + optional route payload
+3. use one entry point to apply deep link
+4. use safe fallback for invalid links
 
 ### 5.11 State restoration
 
-Реализация:
+Implementation:
 
-1. сериализуемый snapshot navigation state
-2. восстановление `flow`, `tab`, стеков на старте
-3. совместимость версий payload
-4. fallback в root при ошибке восстановления
+1. define serializable navigation snapshot
+2. restore `flow`, `tab`, and route stacks on launch
+3. handle payload version compatibility
+4. fallback to root when restore is invalid
 
-## 6. Рекомендуемая структура файлов в новом проекте
+## 6. Recommended Folder Layout for a New Project
 
 ```text
 Navigation/
@@ -363,39 +363,39 @@ Navigation/
     NavigationAnalyticsTracking.swift
 ```
 
-## 7. Тестовый план
+## 7. Test Plan
 
-### Unit (обязательно)
+### Unit (required)
 
 1. push/pop/popToRoot/pop(n)
 2. command handling
-3. mapping `SuccessAction -> NavigationCommand`
-4. no-op сценарии
+3. `SuccessAction -> NavigationCommand` mapping
+4. no-op scenarios
 
-### Integration (желательно)
+### Integration (recommended)
 
 1. coordinator route mapping
-2. cross-flow actions from user intents
+2. cross-flow transitions from user intents
 
-### UI (точечно)
+### UI (targeted)
 
-1. startup flow
-2. happy path onboarding -> authorized
-3. logout reset
+1. startup flow selection
+2. onboarding happy path -> authorized
+3. logout reset path
 
-## 8. Definition of Done для навигационных изменений
+## 8. Definition of Done for Navigation Changes
 
-1. добавлен/обновлен model (`Flow/Route/Command/Action`)
-2. добавлен/обновлен protocol contract
-3. добавлен/обновлен router extension
-4. обновлены coordinators
-5. добавлены тесты
-6. обновлена документация
+1. model is added/updated (`Flow/Route/Command/Action`)
+2. protocol contract is added/updated
+3. router extension is added/updated
+4. coordinators are updated
+5. tests are added/updated
+6. documentation is updated
 
-## 9. Антипаттерны
+## 9. Anti-patterns
 
-1. мутировать state другого flow из UI-кода фичи
-2. дублировать кросс-flow логику в нескольких местах
-3. хранить тяжёлые доменные модели в route enum
-4. делать небезопасный `pop` без clamping
-5. отправлять analytics из множества слоев для одного перехода
+1. mutating another flow's state from feature UI code
+2. duplicating cross-flow logic in multiple places
+3. storing heavy domain models inside route enums
+4. unsafe pop logic without clamping
+5. emitting duplicate analytics events for one transition
