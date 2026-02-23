@@ -6,6 +6,8 @@
 import Foundation
 
 extension AppRouter: SuccessRouting {
+    // MARK: - Default functions
+
     func presentSuccess(
         title: String,
         message: String,
@@ -29,14 +31,20 @@ extension AppRouter: SuccessRouting {
             break
 
         case .goAuthorizedTab1Root:
+            onboardingPopToRoot()
+            tab1PopToRoot()
+            tab2PopToRoot()
+            dismissPaywall()
             flow = .authorized
             selectedTab = .tab1
-            tab1PopToRoot()
 
         case .goAuthorizedTab2Root:
+            onboardingPopToRoot()
+            tab1PopToRoot()
+            tab2PopToRoot()
+            dismissPaywall()
             flow = .authorized
             selectedTab = .tab2
-            tab2PopToRoot()
 
         case .logoutToOnboarding:
             tab1PopToRoot()

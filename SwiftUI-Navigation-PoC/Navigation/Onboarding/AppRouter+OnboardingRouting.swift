@@ -6,6 +6,8 @@
 import Foundation
 
 extension AppRouter: OnboardingRouting {
+    // MARK: - Default functions
+
     func onboardingPush(_ route: OnboardingRoute) {
         onboardingStack.append(route)
     }
@@ -20,13 +22,5 @@ extension AppRouter: OnboardingRouting {
 
     func dismissPaywall() {
         isPaywallPresented = false
-    }
-
-    func finishOnboardingAndGoAuthorized() {
-        flow = .authorized
-        onboardingPopToRoot()
-        selectedTab = .tab1
-        tab1PopToRoot()
-        tab2PopToRoot()
     }
 }

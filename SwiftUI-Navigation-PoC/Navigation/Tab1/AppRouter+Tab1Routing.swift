@@ -6,6 +6,8 @@
 import Foundation
 
 extension AppRouter: Tab1Routing {
+    // MARK: - Default functions
+
     func tab1Push(_ route: Tab1Route) {
         tab1Stack.append(route)
     }

@@ -6,7 +6,11 @@
 import SwiftUI
 
 struct Tab1CoordinatorView: View {
+    // MARK: - Private variables
+
     @EnvironmentObject private var router: AppRouter
+
+    // MARK: - Other
 
     var body: some View {
         NavigationStack(path: $router.tab1Stack) {
@@ -22,7 +26,7 @@ struct Tab1CoordinatorView: View {
                     )
                 }
             )
-            .navigationDestination(for: AppRouter.Tab1Route.self) { route in
+            .navigationDestination(for: Tab1Route.self) { route in
                 switch route {
                 case .screen2:
                     ScreenView(title: "Tab1 Screen2") {

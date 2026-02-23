@@ -6,7 +6,11 @@
 import SwiftUI
 
 struct RootCoordinatorView: View {
+    // MARK: - Private variables
+
     @StateObject private var router = AppRouter()
+
+    // MARK: - Other
 
     var body: some View {
         Group {

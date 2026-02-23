@@ -6,14 +6,18 @@
 import SwiftUI
 
 struct OnboardingCoordinatorView: View {
+    // MARK: - Private variables
+
     @EnvironmentObject private var router: AppRouter
+
+    // MARK: - Other
 
     var body: some View {
         NavigationStack(path: $router.onboardingStack) {
             OnboardingStep1View(
                 onNext: { router.onboardingPush(.step2) }
             )
-            .navigationDestination(for: AppRouter.OnboardingRoute.self) { route in
+            .navigationDestination(for: OnboardingRoute.self) { route in
                 switch route {
                 case .step2:
                     OnboardingStep2View(
@@ -31,7 +35,6 @@ struct OnboardingCoordinatorView: View {
                                 primaryButton: "Open App",
                                 primaryAction: .goAuthorizedTab1Root
                             )
-                            router.finishOnboardingAndGoAuthorized()
                         },
                         onPopToRoot: { router.onboardingPopToRoot() }
                     )

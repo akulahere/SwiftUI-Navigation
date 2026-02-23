@@ -6,19 +6,23 @@
 import SwiftUI
 
 struct AuthorizedCoordinatorView: View {
+    // MARK: - Private variables
+
     @EnvironmentObject private var router: AppRouter
+
+    // MARK: - Other
 
     var body: some View {
         TabView(selection: $router.selectedTab) {
             Tab1CoordinatorView()
                 .environmentObject(router)
                 .tabItem { Label("Tab 1", systemImage: "house") }
-                .tag(AppRouter.Tab.tab1)
+                .tag(Tab.tab1)
 
             Tab2CoordinatorView()
                 .environmentObject(router)
                 .tabItem { Label("Tab 2", systemImage: "person") }
-                .tag(AppRouter.Tab.tab2)
+                .tag(Tab.tab2)
         }
     }
 }
